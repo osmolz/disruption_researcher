@@ -1,3 +1,26 @@
+"""
+GPT-Researcher Prompts - Optimized for AI Disruption Analysis Framework
+
+This module contains YC-style prompts optimized for AI disruption analysis with focus on:
+- Y-axis (Automation Potential): Task complexity, AI tool availability, implementation feasibility
+- X-axis (Market Penetration): Adoption rates, competitive dynamics, customer acceptance
+
+Key Framework Components:
+1. Planning Phase: Strategic sub-query generation with Y/X targeting
+2. Execution Phase: Evidence extraction with 2-3 citations from 2023-2025 sources  
+3. Publishing Phase: Quadrant positioning with self-consistency validation
+
+Quality Controls:
+- Conservative scoring: Cap >5 only with strong evidence and sufficient citations
+- Source validation: Minimum 4 sources, prioritize recent/trusted/relevant
+- Self-consistency: Generate 3 variants, vote on median scores
+- Error handling: Return underspecification errors for insufficient evidence
+
+Output Formats:
+- XML for evidence: <evidence><indicator>...</indicator><score>X</score><cites>[...]</cites></evidence>
+- JSON for final analysis with y_scores, x_scores, quadrant, rationale, tailwinds, headwinds
+"""
+
 import warnings
 from datetime import date, datetime, timezone
 
@@ -35,7 +58,257 @@ class PromptFamily:
         """
         self.cfg = config
 
-    # MCP-specific prompts
+    # DISRUPTION ANALYSIS FRAMEWORK PROMPTS ####################################
+    
+    @staticmethod
+    def generate_disruption_planning_prompt(
+        query: str,
+        domain: str = "",
+        max_subqueries: int = 5,
+        context: List[Dict[str, Any]] = [],
+    ) -> str:
+        """
+        YC-style planning prompt for AI disruption analysis sub-query generation.
+        Focuses on Y-axis (automation potential) and X-axis (market penetration).
+        """
+        
+        context_info = f"Context: {context}" if context else ""
+        
+        return f"""# Role: Strategic Planning Specialist for AI Disruption Analysis
+You are an expert strategist specializing in identifying AI disruption patterns across industries, with deep knowledge of automation potential and market penetration dynamics.
+
+### Task: Generate Strategic Sub-Queries for Disruption Analysis
+Generate {max_subqueries} focused sub-queries to analyze: "{query}" in domain: "{domain}"
+Target Y-axis (automation potential) and X-axis (market penetration) evidence from 2023-2025 sources.
+
+### Plan:
+Step 1: Industry automation assessment - Current task complexity and AI readiness
+Step 2: Technology framework analysis - Available tools and implementation barriers  
+Step 3: Market penetration evaluation - Adoption rates and competitive dynamics
+Step 4: Evidence validation - Ensure 2-3 recent citations per sub-query
+
+### Guidelines:
+- **Rubric**: Score relevance 1-10 (1-3: Irrelevant/outdated, 7-10: Advances Y/X analysis)
+- **Evidence Requirement**: Each sub-query must target sources with 2-3 citations from trusted sources (2023-2025)
+- **Self-Consistency**: Generate 3 variants, vote on median relevance scores ≥7
+- **Quality Control**: If <4 relevant sources available, flag for underspecification
+
+### Examples:
+**High-Quality Sub-Query (Score: 9)**
+- "Construction project management automation tools adoption rates 2024-2025"
+- Targets: Y-axis (automation of scheduling/resource allocation), X-axis (market penetration in construction)
+
+**Low-Quality Sub-Query (Score: 3)** 
+- "General construction industry trends"
+- Issue: Too broad, no Y/X focus, lacks specificity for evidence extraction
+
+{context_info}
+
+### Output Format:
+<plan>
+<step>
+<sub_query>Industry automation trends in {domain} focusing on task complexity reduction 2024-2025</sub_query>
+<rubric_score>8</rubric_score>
+<target_axis>Y-axis automation potential</target_axis>
+</step>
+<step>
+<sub_query>Market penetration rates for AI tools in {domain} competitive landscape</sub_query>
+<rubric_score>7</rubric_score>
+<target_axis>X-axis market penetration</target_axis>
+</step>
+</plan>
+
+Generate exactly {max_subqueries} sub-queries with scores ≥7 or return underspecification error.
+Current date context: {datetime.now(timezone.utc).strftime('%B %d, %Y')}
+"""
+
+    @staticmethod
+    def generate_disruption_execution_prompt(
+        query: str,
+        sources_data: str,
+        max_evidence_items: int = 8,
+    ) -> str:
+        """
+        YC-style execution prompt for evidence extraction with Y/X disruption framework.
+        """
+        
+        return f"""# Role: Evidence Extraction Specialist for AI Disruption Analysis
+You are a senior analyst specializing in extracting automation and market penetration indicators from research sources with rigorous citation standards.
+
+### Task: Extract Y/X Disruption Evidence
+Analyze sources for query: "{query}"
+Extract automation potential (Y-axis) and market penetration (X-axis) indicators with 2-3 citations each.
+
+### Plan:
+Step 1: Identify Y-axis automation evidence (task complexity, AI tool availability, implementation feasibility)
+Step 2: Extract X-axis penetration data (adoption rates, market share, competitive positioning)  
+Step 3: Validate evidence quality with recent citations (2023-2025)
+Step 4: Score each indicator 1-10 based on strength and relevance
+
+### Guidelines:
+- **Evidence Scoring**: 1-3 (Low/weak evidence), 4-6 (Moderate), 7-10 (High/strong evidence)
+- **Citation Requirement**: Minimum 2-3 citations from trusted sources (2023-2025)
+- **Quality Cap**: Score >5 ONLY with strong evidence and sufficient citations
+- **Self-Consistency**: Generate 3 evidence variants, vote on median scores
+- **Token Limit**: Summaries <500 tokens total
+
+### Scoring Rubric:
+- **Recent**: Published 2023-2025 (+2 points)
+- **Trusted**: Authoritative source (McKinsey, Bain, industry leaders) (+2 points)  
+- **Relevant**: Directly addresses Y/X framework (+3 points)
+- **Citations**: 2-3 quality citations (+3 points)
+
+### Examples:
+**High-Quality Evidence (Score: 8)**
+```
+<evidence>
+<indicator>Task Automation Potential</indicator>
+<score>8</score>
+<axis>Y-axis</axis>
+<cites>[McKinsey 2024: Construction Automation Report, Bain 2025: AI in Project Management]</cites>
+<rationale>Strong evidence for 40% task automation in project scheduling with AI tools showing proven ROI</rationale>
+</evidence>
+```
+
+**Low-Quality Evidence (Score: 3)**  
+```
+<evidence>
+<indicator>General Industry Growth</indicator>
+<score>3</score>
+<axis>Neither</axis>
+<cites>[Generic blog 2022]</cites>
+<rationale>Outdated, non-specific, lacks Y/X relevance</rationale>
+</evidence>
+```
+
+### Source Data:
+{sources_data}
+
+### Output Format:
+Extract up to {max_evidence_items} pieces of evidence. If <4 quality sources or average score <4:
+
+<if_block condition="insufficient_evidence">
+{{"error": "Underspecification: Insufficient quality sources for reliable Y/X analysis. Found X sources, need minimum 4 with recent citations."}}
+</if_block>
+
+Otherwise, provide evidence in XML format as shown in examples above.
+"""
+
+    @staticmethod
+    def generate_disruption_publishing_prompt(
+        query: str,
+        evidence_data: str,
+        company_name: str = "",
+    ) -> str:
+        """
+        YC-style publishing prompt for final disruption analysis aggregation into JSON output.
+        """
+        
+        return f"""# Role: Strategic Publisher for AI Disruption Analysis
+You are a senior strategist responsible for synthesizing evidence into authoritative disruption analysis with quadrant positioning and strategic recommendations.
+
+### Task: Aggregate Evidence into Disruption Analysis
+Synthesize evidence for: "{query}" {f"(Company: {company_name})" if company_name else ""}
+Generate final Y/X scores, quadrant positioning, and strategic implications.
+
+### Plan:
+Step 1: Aggregate Y-axis automation scores (median of evidence scores)
+Step 2: Aggregate X-axis penetration scores (median of evidence scores)  
+Step 3: Position in disruption quadrant (Sustaining/Low-End/New-Market/Big Bang)
+Step 4: Identify strategic tailwinds and headwinds
+Step 5: Self-consistency check via 3 analysis variants
+
+### Scoring Framework:
+- **Y-Axis (Automation Potential)**: 1-10 scale
+  - 1-3: Manual/complex tasks, limited AI applicability
+  - 4-6: Moderate automation potential, some AI tools available
+  - 7-10: High automation potential, proven AI solutions
+  
+- **X-Axis (Market Penetration)**: 1-10 scale  
+  - 1-3: Early/niche adoption, high barriers
+  - 4-6: Growing adoption, moderate penetration
+  - 7-10: Mainstream adoption, established market
+
+### Quadrant Mapping:
+- **Sustaining** (High Y, High X): Incremental improvements to existing solutions
+- **Low-End Disruptive** (Low Y, High X): Simpler, more accessible alternatives
+- **New-Market Disruptive** (High Y, Low X): Novel solutions for underserved segments  
+- **Big Bang Disruptive** (High Y, High X): Simultaneous better and cheaper solutions
+
+### Guidelines:
+- **Self-Consistency**: Generate 3 analysis variants, vote on median final scores
+- **Evidence Weighting**: Prioritize recent, trusted sources with strong citations
+- **Conservative Scoring**: Cap scores >7 only with overwhelming evidence
+- **Token Limit**: Total analysis <2000 tokens
+
+### Evidence Data:
+{evidence_data}
+
+### Output Format:
+<analysis>
+<y_scores>[automation_score_1, automation_score_2, ...]</y_scores>
+<x_scores>[penetration_score_1, penetration_score_2, ...]</x_scores>
+<median_y_score>7</median_y_score>
+<median_x_score>4</median_x_score>
+<quadrant>New-Market Disruptive</quadrant>
+<confidence_level>High</confidence_level>
+<rationale>Evidence-based reasoning for quadrant positioning with specific citations and score justification</rationale>
+<tailwinds>
+- Positive factor 1 with supporting evidence
+- Positive factor 2 with citations
+</tailwinds>
+<headwinds>
+- Challenge 1 with evidence
+- Challenge 2 with market data
+</headwinds>
+<strategic_implications>Key recommendations for stakeholders based on quadrant position</strategic_implications>
+</analysis>
+
+If evidence is insufficient for reliable analysis, return:
+{{"error": "Underspecification: Insufficient evidence quality for reliable disruption analysis. Recommend additional research on [specific gaps]."}}
+"""
+
+    @staticmethod
+    def generate_self_consistency_check(
+        original_analysis: str,
+        variant_count: int = 3,
+    ) -> str:
+        """
+        Generate self-consistency check prompt for validation of disruption analysis.
+        """
+        
+        return f"""# Role: Analysis Validation Specialist
+You are responsible for ensuring consistency and reliability in disruption analysis through multi-variant validation.
+
+### Task: Self-Consistency Validation
+Review the original analysis and generate {variant_count} alternative interpretations using the same evidence.
+Vote on median scores for final validation.
+
+### Original Analysis:
+{original_analysis}
+
+### Validation Process:
+1. Generate {variant_count} alternative score interpretations
+2. Identify score variance and reasoning differences  
+3. Vote on median scores for Y-axis and X-axis
+4. Flag significant discrepancies (>2 point variance)
+5. Provide consensus recommendation
+
+### Output Format:
+<validation>
+<variant_scores>
+<variant_1><y_score>X</y_score><x_score>Y</x_score></variant_1>
+<variant_2><y_score>X</y_score><x_score>Y</x_score></variant_2>
+<variant_3><y_score>X</y_score><x_score>Y</x_score></variant_3>
+</variant_scores>
+<median_consensus><y_score>X</y_score><x_score>Y</x_score></median_consensus>
+<variance_flag>{"High" if variance >2 else "Low"}</variance_flag>
+<consensus_confidence>{"High" if variance <1 else "Medium" if variance <2 else "Low"}</consensus_confidence>
+<recommendation>Final validated analysis or flag for additional research</recommendation>
+</validation>
+"""
+
+    # MCP-specific prompts (existing)
     @staticmethod
     def generate_mcp_tool_selection_prompt(query: str, tools_info: List[Dict], max_tools: int = 3) -> str:
         """
@@ -125,7 +398,7 @@ Please conduct thorough research and provide your findings. Use the tools strate
         max_iterations: int = 3,
         context: List[Dict[str, Any]] = [],
     ):
-        """Generates the search queries prompt for the given question.
+        """Generates YC-style search queries prompt optimized for disruption analysis.
         Args:
             question (str): The question to generate the search queries prompt for
             parent_query (str): The main question (only relevant for detailed reports)
@@ -145,21 +418,51 @@ Please conduct thorough research and provide your findings. Use the tools strate
             task = question
 
         context_prompt = f"""
-You are a seasoned research assistant tasked with generating search queries to find relevant information for the following task: "{task}".
-Context: {context}
+### Context Intelligence:
+{context}
 
-Use this context to inform and refine your search queries. The context provides real-time web information that can help you generate more specific and relevant queries. Consider any current events, recent developments, or specific details mentioned in the context that could enhance the search queries.
+Use this real-time context to enhance search query specificity, focusing on recent developments (2023-2025) that impact automation potential and market penetration dynamics.
 """ if context else ""
 
         dynamic_example = ", ".join([f'"query {i+1}"' for i in range(max_iterations)])
 
-        return f"""Write {max_iterations} google search queries to search online that form an objective opinion from the following task: "{task}"
+        return f"""# Role: Strategic Search Query Specialist for Disruption Analysis
+You are an expert research strategist specializing in identifying AI disruption patterns through targeted search queries that uncover automation potential and market penetration evidence.
 
-Assume the current date is {datetime.now(timezone.utc).strftime('%B %d, %Y')} if required.
+### Task: Generate Disruption-Focused Search Queries
+Generate {max_iterations} strategic search queries for: "{task}"
+Focus on Y-axis (automation potential) and X-axis (market penetration) evidence from 2023-2025 sources.
+
+### Plan:
+Step 1: Industry automation assessment queries - Target task complexity and AI tool adoption
+Step 2: Market penetration evaluation queries - Focus on adoption rates and competitive dynamics
+Step 3: Evidence validation queries - Ensure access to recent, trusted sources with citations
+
+### Guidelines:
+- **Temporal Focus**: Prioritize 2023-2025 sources for current disruption landscape
+- **Authority Targeting**: Include terms for trusted sources (McKinsey, Bain, industry reports)
+- **Y-X Framework**: Each query should target either automation potential OR market penetration
+- **Citation Readiness**: Structure queries to find sources with quantitative data and citations
+- **Specificity**: Avoid generic terms, focus on measurable disruption indicators
+
+### Search Query Types:
+1. **Automation Evidence**: "[industry] AI automation tools adoption rates 2024", "[task] complexity reduction AI 2025"
+2. **Penetration Evidence**: "[industry] AI market penetration 2024", "[technology] competitive landscape report 2025"  
+3. **Authority Sources**: "McKinsey [industry] AI disruption 2024", "Bain automation report [domain] 2025"
+
+### Quality Standards:
+- Each query must target recent sources (2023-2025)
+- Include industry-specific terminology for precision
+- Structure for quantitative evidence discovery
+- Enable citation-rich source identification
 
 {context_prompt}
+
+### Output Format:
 You must respond with a list of strings in the following format: [{dynamic_example}].
 The response should contain ONLY the list.
+
+Current date context: {datetime.now(timezone.utc).strftime('%B %d, %Y')}
 """
 
     @staticmethod
@@ -172,16 +475,16 @@ The response should contain ONLY the list.
         tone=None,
         language="english",
     ):
-        """Generates the report prompt for the given question and research summary.
-        Args: question (str): The question to generate the report prompt for
-                research_summary (str): The research summary to generate the report prompt for
-        Returns: str: The report prompt for the given question and research summary
+        """Generates YC-style report prompt optimized for disruption analysis framework.
+        Args: question (str): The disruption analysis question to generate the report for
+                context: The research context containing Y/X evidence and citations
+        Returns: str: The disruption-focused report prompt
         """
 
         reference_prompt = ""
         if report_source == ReportSource.Web.value:
             reference_prompt = f"""
-You MUST write all used source urls at the end of the report as references, and make sure to not add duplicated sources, but only one reference for each.
+You MUST write all used source urls at the end of the report as references, prioritizing 2023-2025 sources and authoritative publications.
 Every url should be hyperlinked: [url website](url)
 Additionally, you MUST include hyperlinks to the relevant URLs wherever they are referenced in the report:
 
@@ -189,68 +492,133 @@ eg: Author, A. A. (Year, Month Date). Title of web page. Website Name. [url webs
 """
         else:
             reference_prompt = f"""
-You MUST write all used source document names at the end of the report as references, and make sure to not add duplicated sources, but only one reference for each."
+You MUST write all used source document names at the end of the report as references, prioritizing recent and authoritative sources.
 """
 
-        tone_prompt = f"Write the report in a {tone.value} tone." if tone else ""
+        tone_prompt = f"Write the report in a {tone.value} tone with emphasis on evidence-based analysis." if tone else ""
 
-        return f"""
-Information: "{context}"
----
-Using the above information, answer the following query or task: "{question}" in a detailed report --
-The report should focus on the answer to the query, should be well structured, informative,
-in-depth, and comprehensive, with facts and numbers if available and at least {total_words} words.
-You should strive to write the report as long as you can using all relevant and necessary information provided.
+        return f"""# Role: Strategic Analyst for AI Disruption Reporting
+You are a senior strategic analyst specializing in AI disruption analysis, responsible for synthesizing research into authoritative reports with Y/X framework positioning and evidence-based recommendations.
 
-Please follow all of the following guidelines in your report:
-- You MUST determine your own concrete and valid opinion based on the given information. Do NOT defer to general and meaningless conclusions.
-- You MUST write the report with markdown syntax and {report_format} format.
-- Use markdown tables when presenting structured data or comparisons to enhance readability.
-- You MUST prioritize the relevance, reliability, and significance of the sources you use. Choose trusted sources over less reliable ones.
-- You must also prioritize new articles over older articles if the source can be trusted.
-- You MUST NOT include a table of contents. Start from the main report body directly.
-- Use in-text citation references in {report_format} format and make it with markdown hyperlink placed at the end of the sentence or paragraph that references them like this: ([in-text citation](url)).
-- Don't forget to add a reference list at the end of the report in {report_format} format and full url links without hyperlinks.
+### Task: Generate Disruption Analysis Report
+Using the research context below, generate a comprehensive disruption analysis report for: "{question}"
+Focus on Y-axis (automation potential) and X-axis (market penetration) evidence with quadrant positioning.
+
+### Research Context:
+"{context}"
+
+### Plan:
+Step 1: Analyze automation potential evidence (Y-axis indicators)
+Step 2: Evaluate market penetration evidence (X-axis indicators)  
+Step 3: Position findings in disruption quadrant framework
+Step 4: Synthesize strategic implications and recommendations
+Step 5: Validate with evidence citations and quantitative support
+
+### Report Guidelines:
+**Structure Requirements**:
+- **Executive Summary**: Y/X positioning with confidence level
+- **Automation Analysis** (Y-Axis): Task complexity, AI tool availability, implementation feasibility
+- **Market Penetration** (X-Axis): Adoption rates, competitive dynamics, customer acceptance
+- **Disruption Quadrant**: Sustaining/Low-End/New-Market/Big Bang positioning with rationale
+- **Strategic Implications**: Actionable recommendations based on quadrant position
+- **Evidence Base**: Citation-rich support with quantitative data emphasis
+
+**Quality Standards**:
+- Minimum {total_words} words with comprehensive evidence integration
+- Prioritize 2023-2025 sources and authoritative publications (McKinsey, Bain, industry leaders)
+- Include quantitative data, statistics, and concrete metrics throughout
+- Provide evidence-based conclusions with specific Y/X score rationale
+- Use markdown tables for comparative data and framework positioning
+
+**Citation Requirements**:
+- In-text citations in {report_format} format with markdown hyperlinks: ([in-text citation](url))
+- Prioritize recent, trusted sources over older or less reliable ones
+- Include 2-3 citations minimum per major claim or evidence point
 - {reference_prompt}
-- {tone_prompt}
 
-You MUST write the report in the following language: {language}.
-Please do your best, this is very important to my career.
-Assume that the current date is {date.today()}.
+**Framework Application**:
+- **Conservative Scoring**: High scores (>7) only with overwhelming evidence
+- **Evidence Weighting**: Recent + Trusted + Relevant + Citations ≥2 for credibility
+- **Quadrant Logic**: Clear positioning based on Y/X evidence aggregation
+- **Strategic Focus**: Actionable insights for stakeholders based on disruption position
+
+**Analysis Requirements**:
+- Determine concrete, evidence-based position - avoid generic conclusions
+- Integrate multiple source perspectives when supported by data
+- Highlight quantitative evidence and measurable indicators
+- Address implementation barriers and market dynamics
+- Provide confidence levels for key findings
+
+{tone_prompt}
+
+### Output Language: {language}
+
+### Critical Success Factors:
+This analysis will inform strategic decision-making. Ensure evidence-based rigor, recent source prioritization, and actionable strategic insights based on disruption quadrant positioning.
+
+Current analysis date: {date.today()}
 """
 
     @staticmethod
     def curate_sources(query, sources, max_results=10):
-        return f"""Your goal is to evaluate and curate the provided scraped content for the research task: "{query}"
-    while prioritizing the inclusion of relevant and high-quality information, especially sources containing statistics, numbers, or concrete data.
+        return f"""# Role: Source Curation Specialist for Disruption Analysis
+You are an expert research curator specializing in identifying high-quality sources for AI disruption analysis with focus on automation potential and market penetration evidence.
 
-The final curated list will be used as context for creating a research report, so prioritize:
-- Retaining as much original information as possible, with extra emphasis on sources featuring quantitative data or unique insights
-- Including a wide range of perspectives and insights
-- Filtering out only clearly irrelevant or unusable content
+### Task: Curate Sources for Y/X Disruption Framework
+Evaluate and curate sources for: "{query}"
+Prioritize sources containing Y-axis (automation potential) and X-axis (market penetration) indicators with quantitative data and recent citations.
 
-EVALUATION GUIDELINES:
-1. Assess each source based on:
-   - Relevance: Include sources directly or partially connected to the research query. Err on the side of inclusion.
-   - Credibility: Favor authoritative sources but retain others unless clearly untrustworthy.
-   - Currency: Prefer recent information unless older data is essential or valuable.
-   - Objectivity: Retain sources with bias if they provide a unique or complementary perspective.
-   - Quantitative Value: Give higher priority to sources with statistics, numbers, or other concrete data.
-2. Source Selection:
-   - Include as many relevant sources as possible, up to {max_results}, focusing on broad coverage and diversity.
-   - Prioritize sources with statistics, numerical data, or verifiable facts.
-   - Overlapping content is acceptable if it adds depth, especially when data is involved.
-   - Exclude sources only if they are entirely irrelevant, severely outdated, or unusable due to poor content quality.
-3. Content Retention:
-   - DO NOT rewrite, summarize, or condense any source content.
-   - Retain all usable information, cleaning up only clear garbage or formatting issues.
-   - Keep marginally relevant or incomplete sources if they contain valuable data or insights.
+### Plan:
+Step 1: Assess source relevance to Y/X disruption framework
+Step 2: Evaluate source authority and recency (prioritize 2023-2025)
+Step 3: Prioritize quantitative data and citation-rich sources
+Step 4: Select up to {max_results} highest-quality sources
 
-SOURCES LIST TO EVALUATE:
+### Curation Guidelines:
+**Primary Criteria** (Required for inclusion):
+- **Y/X Relevance**: Contains automation potential OR market penetration indicators
+- **Quantitative Value**: Includes statistics, numbers, market data, or concrete metrics
+- **Citation Quality**: From authoritative sources (McKinsey, Bain, industry reports, academic)
+- **Temporal Relevance**: Recent sources (2023-2025) prioritized, older only if essential
+
+**Secondary Criteria** (Enhancement factors):
+- **Source Authority**: Favor McKinsey, Bain, BCG, academic institutions, industry leaders
+- **Data Depth**: Comprehensive analysis over surface-level information  
+- **Multiple Perspectives**: Include diverse viewpoints if they add Y/X insights
+- **Implementation Evidence**: Real-world case studies and adoption examples
+
+### Scoring Framework:
+**High Priority (Keep)**: 
+- Recent authoritative sources with Y/X relevant quantitative data
+- Industry reports with adoption rates, automation metrics, market penetration data
+- Case studies with measurable automation/penetration outcomes
+
+**Medium Priority** (Keep if space):
+- Older sources (2020-2022) with unique Y/X insights
+- Opinion pieces from recognized industry experts
+- Sources with qualitative insights supporting quantitative trends
+
+**Low Priority (Exclude)**:
+- Generic/non-specific content without Y/X relevance
+- Sources without quantitative data or concrete evidence
+- Outdated information (pre-2020) without historical significance
+- Clearly unreliable or non-authoritative sources
+
+### Content Retention Standards:
+- **Preserve Original**: DO NOT rewrite, summarize, or condense source content
+- **Clean Only**: Remove formatting issues and obvious errors
+- **Evidence Focus**: Retain ALL quantitative data, statistics, and metrics
+- **Citation Preservation**: Maintain source attribution and publication details
+
+### Sources to Evaluate:
 {sources}
 
-You MUST return your response in the EXACT sources JSON list format as the original sources.
-The response MUST not contain any markdown format or additional text (like ```json), just the JSON list!
+### Output Requirements:
+Return response in EXACT sources JSON list format as original sources.
+Select up to {max_results} sources prioritizing Y/X framework relevance and quantitative evidence.
+Response MUST contain NO markdown formatting or additional text - JSON list only!
+
+If fewer than 4 quality sources meet Y/X criteria, include warning in source metadata.
 """
 
     @staticmethod
@@ -420,17 +788,52 @@ response:
 
     @staticmethod
     def generate_summary_prompt(query, data):
-        """Generates the summary prompt for the given question and text.
-        Args: question (str): The question to generate the summary prompt for
-                text (str): The text to generate the summary prompt for
-        Returns: str: The summary prompt for the given question and text
+        """Generates YC-style summary prompt optimized for disruption evidence extraction.
+        Args: query (str): The disruption analysis query to extract evidence for
+                data (str): The source text to analyze for Y/X indicators
+        Returns: str: The disruption-focused summary prompt
         """
 
-        return (
-            f'{data}\n Using the above text, summarize it based on the following task or query: "{query}".\n If the '
-            f"query cannot be answered using the text, YOU MUST summarize the text in short.\n Include all factual "
-            f"information such as numbers, stats, quotes, etc if available. "
-        )
+        return f"""# Role: Evidence Extraction Specialist for Disruption Analysis
+You are a senior analyst specializing in extracting automation potential and market penetration indicators from research sources with rigorous evidence standards.
+
+### Task: Extract Disruption Evidence Summary
+Analyze the provided text for query: "{query}"
+Extract key evidence related to Y-axis (automation potential) and X-axis (market penetration) with citations.
+
+### Plan:
+Step 1: Identify automation evidence (task complexity, AI tools, implementation feasibility)
+Step 2: Extract market penetration data (adoption rates, market share, competitive positioning)
+Step 3: Preserve quantitative data, statistics, and concrete evidence
+Step 4: Maintain source attribution and citation readiness
+
+### Guidelines:
+- **Evidence Focus**: Prioritize Y/X framework indicators over general information
+- **Quantitative Priority**: Include ALL numbers, stats, percentages, and quantifiable data
+- **Citation Preservation**: Maintain source attribution and publication details
+- **Temporal Relevance**: Flag publication dates, especially 2023-2025 sources
+- **Quality Assessment**: Note source authority (McKinsey, Bain, industry leaders)
+- **Token Efficiency**: Summarize <500 tokens while preserving critical evidence
+
+### Source Text:
+{data}
+
+### Output Requirements:
+If the query cannot be answered using the text, YOU MUST summarize the text focusing on disruption-relevant elements.
+Include ALL factual information such as:
+- Numbers, statistics, percentages
+- Market data and adoption rates  
+- Automation capabilities and tool availability
+- Implementation timelines and feasibility
+- Competitive positioning and market share
+- Industry expert quotes and citations
+
+### Evidence Extraction Focus:
+**Y-Axis Indicators**: Task automation potential, AI tool sophistication, implementation barriers
+**X-Axis Indicators**: Market adoption rates, competitive penetration, customer acceptance
+
+Preserve exact citations and quantitative data for downstream analysis.
+"""
 
     @staticmethod
     def pretty_print_docs(docs: list[Document], top_n: int | None = None) -> str:
@@ -445,6 +848,250 @@ response:
     def join_local_web_documents(docs_context: str, web_context: str) -> str:
         """Joins local web documents with context scraped from the internet"""
         return f"Context from local documents: {docs_context}\n\nContext from web sources: {web_context}"
+
+    # DISRUPTION ANALYSIS UTILITIES ############################################
+    
+    @staticmethod
+    def validate_evidence_quality(evidence_list: List[Dict], min_sources: int = 4) -> Dict[str, Any]:
+        """
+        Validate evidence quality for disruption analysis with underspecification detection.
+        
+        Args:
+            evidence_list: List of evidence items with scores and citations
+            min_sources: Minimum number of quality sources required
+            
+        Returns:
+            Dict with validation results and error handling
+        """
+        
+        if len(evidence_list) < min_sources:
+            return {
+                "valid": False,
+                "error": f"Underspecification: Found {len(evidence_list)} sources, need minimum {min_sources} for reliable Y/X analysis."
+            }
+        
+        # Check for recent citations (2023-2025)
+        recent_sources = [e for e in evidence_list if any("2023" in str(cite) or "2024" in str(cite) or "2025" in str(cite) for cite in e.get("cites", []))]
+        
+        if len(recent_sources) < min_sources * 0.5:  # At least 50% recent sources
+            return {
+                "valid": False,
+                "error": f"Underspecification: Insufficient recent sources (2023-2025). Found {len(recent_sources)} recent, need minimum {min_sources//2}."
+            }
+        
+        # Check average evidence quality scores
+        scores = [e.get("score", 0) for e in evidence_list if e.get("score")]
+        avg_score = sum(scores) / len(scores) if scores else 0
+        
+        if avg_score < 4:
+            return {
+                "valid": False,
+                "error": f"Underspecification: Low evidence quality. Average score {avg_score:.1f}, need minimum 4.0 for reliable analysis."
+            }
+        
+        return {
+            "valid": True,
+            "quality_score": avg_score,
+            "recent_sources": len(recent_sources),
+            "total_sources": len(evidence_list)
+        }
+
+    @staticmethod
+    def generate_disruption_variants_prompt(base_analysis: str, variant_count: int = 3) -> str:
+        """
+        Generate prompt for creating analysis variants for self-consistency validation.
+        """
+        
+        return f"""# Role: Multi-Perspective Analysis Specialist
+You are responsible for generating alternative interpretations of disruption analysis to ensure consistency and reliability through variant validation.
+
+### Task: Generate Analysis Variants
+Create {variant_count} alternative interpretations of the base analysis using the same evidence but with different analytical perspectives.
+
+### Base Analysis:
+{base_analysis}
+
+### Variant Generation Guidelines:
+1. **Maintain Evidence Base**: Use only the same evidence from base analysis
+2. **Alternative Perspectives**: Apply different analytical lenses (conservative, optimistic, sector-specific)
+3. **Score Variance**: Allow reasonable score variations (±1-2 points) based on interpretation
+4. **Consistent Framework**: Maintain Y/X disruption framework throughout all variants
+
+### Variant Types:
+**Variant 1 - Conservative Analysis**: 
+- Emphasize implementation barriers and adoption challenges
+- Weight evidence conservatively, favor lower scores for uncertain indicators
+- Focus on market maturity and established player advantages
+
+**Variant 2 - Balanced Analysis**:
+- Neutral perspective weighing evidence objectively  
+- Standard interpretation of Y/X indicators
+- Consider both opportunities and challenges equally
+
+**Variant 3 - Progressive Analysis**:
+- Emphasize innovation potential and early adoption signals
+- Weight recent evidence and forward-looking indicators heavily
+- Focus on disruption potential and emerging trends
+
+### Output Format:
+<variants>
+<variant_1>
+<y_score>X</y_score>
+<x_score>Y</x_score>
+<perspective>Conservative</perspective>
+<rationale>Evidence interpretation emphasizing challenges and barriers</rationale>
+</variant_1>
+<variant_2>
+<y_score>X</y_score>
+<x_score>Y</x_score>
+<perspective>Balanced</perspective>
+<rationale>Neutral evidence interpretation with equal weighting</rationale>
+</variant_2>
+<variant_3>
+<y_score>X</y_score>
+<x_score>Y</x_score>
+<perspective>Progressive</perspective>
+<rationale>Evidence interpretation emphasizing innovation potential</rationale>
+</variant_3>
+</variants>
+
+Generate exactly {variant_count} variants with scores and rationale for each perspective.
+"""
+
+    @staticmethod
+    def calculate_consensus_scores(variants: List[Dict]) -> Dict[str, Any]:
+        """
+        Calculate consensus scores from analysis variants using median voting.
+        
+        Args:
+            variants: List of variant analyses with y_score and x_score
+            
+        Returns:
+            Dict with consensus scores and confidence metrics
+        """
+        
+        y_scores = [v.get("y_score", 0) for v in variants if v.get("y_score")]
+        x_scores = [v.get("x_score", 0) for v in variants if v.get("x_score")]
+        
+        if not y_scores or not x_scores:
+            return {"error": "Insufficient variant scores for consensus calculation"}
+        
+        # Calculate median scores
+        y_median = sorted(y_scores)[len(y_scores)//2]
+        x_median = sorted(x_scores)[len(x_scores)//2]
+        
+        # Calculate variance for confidence assessment
+        y_variance = max(y_scores) - min(y_scores)
+        x_variance = max(x_scores) - min(x_scores)
+        
+        # Determine confidence level
+        max_variance = max(y_variance, x_variance)
+        if max_variance <= 1:
+            confidence = "High"
+        elif max_variance <= 2:
+            confidence = "Medium"
+        else:
+            confidence = "Low"
+        
+        return {
+            "y_consensus": y_median,
+            "x_consensus": x_median,
+            "y_variance": y_variance,
+            "x_variance": x_variance,
+            "confidence_level": confidence,
+            "requires_additional_research": max_variance > 2
+        }
+
+    @staticmethod
+    def get_disruption_workflow_example() -> Dict[str, str]:
+        """
+        Provide example workflow for complete disruption analysis.
+        
+        Returns:
+            Dict with example usage of optimized prompts for disruption analysis
+        """
+        
+        return {
+            "step_1_planning": """
+# Example: Planning Phase
+query = "Procore construction project management automation"
+domain = "construction"
+
+prompt = PromptFamily.generate_disruption_planning_prompt(
+    query=query, 
+    domain=domain, 
+    max_subqueries=3
+)
+
+# Expected sub-queries:
+# 1. "Construction project scheduling automation tools adoption rates 2024-2025"
+# 2. "Procore market penetration construction industry competitive analysis"  
+# 3. "AI task automation construction project management feasibility study"
+""",
+            
+            "step_2_execution": """
+# Example: Execution Phase  
+query = "Procore construction automation potential"
+sources_data = "[scraped content from research]"
+
+prompt = PromptFamily.generate_disruption_execution_prompt(
+    query=query,
+    sources_data=sources_data,
+    max_evidence_items=6
+)
+
+# Expected evidence format:
+# <evidence>
+# <indicator>Task Automation Potential</indicator>
+# <score>3</score>
+# <axis>Y-axis</axis>
+# <cites>[McKinsey 2024: Construction Tech Report]</cites>
+# <rationale>Limited automation in core workflows, manual scheduling dominates</rationale>
+# </evidence>
+""",
+            
+            "step_3_publishing": """
+# Example: Publishing Phase
+query = "Procore disruption analysis"
+evidence_data = "[extracted evidence with Y/X scores]"
+
+prompt = PromptFamily.generate_disruption_publishing_prompt(
+    query=query,
+    evidence_data=evidence_data,
+    company_name="Procore"
+)
+
+# Expected analysis format:
+# <analysis>
+# <y_scores>[3, 4, 3]</y_scores>
+# <x_scores>[7, 8, 6]</x_scores>
+# <median_y_score>3</median_y_score>
+# <median_x_score>7</median_x_score>
+# <quadrant>Low-End Disruptive</quadrant>
+# <confidence_level>Medium</confidence_level>
+# <rationale>High market penetration but limited automation potential...</rationale>
+# </analysis>
+""",
+            
+            "step_4_validation": """
+# Example: Self-Consistency Validation
+base_analysis = "[initial disruption analysis]"
+
+variants_prompt = PromptFamily.generate_disruption_variants_prompt(
+    base_analysis=base_analysis,
+    variant_count=3
+)
+
+# Calculate consensus
+consensus = PromptFamily.calculate_consensus_scores([
+    {"y_score": 3, "x_score": 7},
+    {"y_score": 4, "x_score": 6}, 
+    {"y_score": 3, "x_score": 8}
+])
+
+# Result: {"y_consensus": 3, "x_consensus": 7, "confidence_level": "High"}
+"""
+        }
 
     ################################################################################################
 
@@ -737,6 +1384,7 @@ report_type_mapping = {
     ReportType.CustomReport.value: "generate_custom_report_prompt",
     ReportType.SubtopicReport.value: "generate_subtopic_report_prompt",
     ReportType.DeepResearch.value: "generate_deep_research_prompt",
+    "DisruptionAnalysis": "generate_disruption_publishing_prompt",
 }
 
 
