@@ -13,7 +13,67 @@ try:
 except ImportError:
     HAS_MCP_ADAPTERS = False
 
+# Fallback OpenAI import for when MCP adapters aren't available
+try:
+    import openai
+    HAS_OPENAI = True
+except ImportError:
+    HAS_OPENAI = False
+
 logger = logging.getLogger(__name__)
+
+
+async def call_llm_fallback(
+    prompt: str, 
+    model: str = "gpt-4o-mini",
+    temperature: float = 0.3,
+    max_tokens: int = 500,
+    cost_callback: callable = None
+) -> str:
+    """
+    Fallback LLM call when langchain-mcp-adapters are not available.
+    
+    Args:
+        prompt: The prompt to send
+        model: OpenAI model to use
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens to generate
+        cost_callback: Optional callback for cost tracking
+        
+    Returns:
+        str: The LLM response
+    """
+    if not HAS_OPENAI:
+        logger.error("Neither langchain-mcp-adapters nor openai library available")
+        return ""
+        
+    try:
+        client = openai.AsyncOpenAI()
+        
+        messages = [{"role": "user", "content": prompt}]
+        
+        response = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        
+        content = response.choices[0].message.content
+        
+        # Track costs if callback provided
+        if cost_callback and response.usage:
+            # Estimate cost based on token usage (rough calculation)
+            input_tokens = response.usage.prompt_tokens
+            output_tokens = response.usage.completion_tokens
+            estimated_cost = (input_tokens * 0.000005) + (output_tokens * 0.000015)
+            cost_callback(estimated_cost)
+        
+        return content or ""
+        
+    except Exception as e:
+        logger.error(f"Error in fallback LLM call: {e}")
+        return ""
 
 
 class MCPClientManager:
@@ -24,6 +84,7 @@ class MCPClientManager:
     - Converting GPT Researcher MCP configs to langchain format
     - Creating and managing MultiServerMCPClient instances
     - Handling client cleanup and resource management
+    - Providing fallback functionality when adapters unavailable
     """
 
     def __init__(self, mcp_configs: List[Dict[str, Any]]):
@@ -109,7 +170,7 @@ class MCPClientManager:
                 return self._client
                 
             if not HAS_MCP_ADAPTERS:
-                logger.error("langchain-mcp-adapters not installed")
+                logger.error("langchain-mcp-adapters not installed - fallback mode enabled")
                 return None
                 
             if not self.mcp_configs:
@@ -132,20 +193,43 @@ class MCPClientManager:
 
     async def close_client(self):
         """
-        Properly close the MCP client and clean up resources.
+        Properly close the MCP client and clean up resources with explicit cleanup.
         """
         async with self._client_lock:
             if self._client is not None:
                 try:
-                    # Since MultiServerMCPClient doesn't support context manager
-                    # or explicit close methods in langchain-mcp-adapters 0.1.0,
-                    # we just clear the reference and let garbage collection handle it
-                    logger.debug("Releasing MCP client reference")
+                    # Check if the client has an explicit close method
+                    if hasattr(self._client, 'close'):
+                        logger.debug("Explicitly closing MCP client")
+                        if asyncio.iscoroutinefunction(self._client.close):
+                            await self._client.close()
+                        else:
+                            self._client.close()
+                    elif hasattr(self._client, 'aclose'):
+                        logger.debug("Explicitly closing MCP client with aclose")
+                        await self._client.aclose()
+                    else:
+                        logger.debug("No explicit close method found, relying on garbage collection")
+                        
+                    # Additional cleanup for any open connections
+                    if hasattr(self._client, '_clients'):
+                        for client_name, client in self._client._clients.items():
+                            if hasattr(client, 'close'):
+                                try:
+                                    if asyncio.iscoroutinefunction(client.close):
+                                        await client.close()
+                                    else:
+                                        client.close()
+                                    logger.debug(f"Closed individual client: {client_name}")
+                                except Exception as e:
+                                    logger.warning(f"Error closing client {client_name}: {e}")
+                                    
                 except Exception as e:
                     logger.error(f"Error during MCP client cleanup: {e}")
                 finally:
                     # Always clear the reference
                     self._client = None
+                    logger.debug("MCP client reference cleared")
 
     async def get_all_tools(self) -> List:
         """
