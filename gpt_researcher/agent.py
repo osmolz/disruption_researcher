@@ -10,6 +10,7 @@ from .memory import Memory
 from .utils.enum import ReportSource, ReportType, Tone
 from .llm_provider import GenericLLMProvider
 from .prompts import get_prompt_family
+from .actions.retriever import get_retrievers
 
 # Core research skills for disruption analysis (pruned)
 from .skills.researcher import ResearchConductor
@@ -18,9 +19,12 @@ from .skills.browser import BrowserManager
 from .skills.curator import SourceCurator
 
 from .actions import (
-    get_search_results,
-    get_retrievers,
-    choose_agent
+    choose_agent,
+    plan_research_outline,
+    generate_report,
+    write_report_to_html,
+    write_report_to_docx,
+    write_md_to_pdf
 )
 
 
@@ -68,6 +72,20 @@ class GPTResearcher:
         self.research_costs = 0.0
         self.log_handler = log_handler
         self.prompt_family = get_prompt_family(self.cfg.prompt_family, self.cfg)
+        # CoT: Step1: Initialize MCP configs (default web_search/browse_page if empty)
+        self.mcp_configs = self._init_mcp_configs(kwargs.get('mcp_configs'))
+        
+        # Initialize missing attributes expected by skills
+        self.visited_urls = set()  # Should be a set for .add() method
+        self.context = []
+        self.websocket = None
+        self.agent = "Business Analyst Agent"  # Default agent name for disruption analysis
+        self.role = """You are a Senior Business Intelligence Analyst specializing in AI disruption analysis. 
+        Your expertise includes identifying market vulnerabilities, competitive threats, and strategic opportunities 
+        in the context of generative AI transformation."""
+        self.query_domains = kwargs.get('query_domains', [])
+        self.parent_query = kwargs.get('parent_query', "")
+        self.vector_store = None  # Vector store for research context
         
         # Enhanced framework configs for disruption analysis with environment integration
         self.framework_configs = {
@@ -114,6 +132,12 @@ class GPTResearcher:
         
         self.retrievers = get_retrievers(self.headers, self.cfg)
         
+        # Initialize memory for embeddings
+        self.memory = Memory(
+            embedding_provider=self.cfg.embedding_provider,
+            model=self.cfg.embedding_model
+        )
+        
         # Initialize core components (pruned for single-mode)
         self.research_conductor: ResearchConductor = ResearchConductor(self)
         self.context_manager: ContextManager = ContextManager(self)
@@ -137,6 +161,24 @@ class GPTResearcher:
                 "completion_validated": False
             }
         }
+
+    def _init_mcp_configs(self, mcp_configs=None):
+        """CoT: Ensure mcp_configs is set; default to web_search/browse_page if empty."""
+        if mcp_configs and isinstance(mcp_configs, list) and len(mcp_configs) > 0:
+            return mcp_configs
+        # Default minimal MCP tool configs for trusted evidence
+        return [
+            {
+                'name': 'web_search',
+                'command': 'python web_search.py',
+                'description': 'Web search tool for trusted evidence (2023-2025)'
+            },
+            {
+                'name': 'browse_page',
+                'command': 'python browse_page.py',
+                'description': 'Browser tool for page content extraction'
+            }
+        ]
 
     def _validate_framework_config(self):
         """Validate framework configuration for Y/X analysis requirements."""
@@ -171,15 +213,103 @@ class GPTResearcher:
         return validated_domains
 
     # Core research methods (already implemented above)
-    async def conduct_research(self, on_progress=None):
-        """Enhanced ReAct orchestration loop for disruption analysis with adaptive retry."""
-        # Implementation already provided above
-        pass
+    async def conduct_research(self) -> tuple[str, list | None]:
+        """
+        Runs the research process and returns the report.
+        """
+        if self.verbose:
+            print(f"🔍 Starting disruption research for: {self.query}")
+        
+        self.react_state["start_time"] = time.time()
+        
+        try:
+            # Initialize research context
+            self.react_state["context"] = []
+            
+            # Use the research conductor to perform the research
+            report = await self.research_conductor.conduct_research()
+
+            # Get the research context from the conductor
+            self.research_context = self.research_conductor.get_context()
+            self.mcp_context = self.research_conductor.get_mcp_context()
+
+            return report, self.mcp_context
+            
+        except Exception as e:
+            if self.verbose:
+                print(f"❌ Research error: {str(e)}")
+            # Ensure we have some context even if research fails
+            if not self.react_state["context"]:
+                self.react_state["context"] = [{"content": f"Research failed with error: {str(e)}", "source": "error"}]
+            raise e
 
     async def write_report(self, existing_headers: list = [], relevant_written_contents: list = [], ext_context=None, custom_prompt="") -> str:
         """Generate structured Y/X framework JSON report for disruption analysis."""
-        # Implementation already provided above  
-        pass
+        from .actions.report_generation import generate_report
+        
+        if self.verbose:
+            print(f"✍️ Writing disruption analysis report for '{self.query}'...")
+        
+        # Use external context if provided, otherwise use research context
+        context = ext_context or self.react_state.get("context", [])
+        
+        if not context:
+            if self.verbose:
+                print("⚠️ No research context found. Report may be limited.")
+            context = []
+        
+        # Create agent role prompt for disruption analysis
+        agent_role_prompt = """You are a Senior Business Intelligence Analyst specializing in AI disruption analysis. 
+        Your expertise includes identifying market vulnerabilities, competitive threats, and strategic opportunities 
+        in the context of generative AI transformation. Provide analytical, data-driven insights with specific 
+        recommendations and quantitative assessments where possible."""
+        
+        try:
+            # Generate the report using the standard report generation function
+            report = await generate_report(
+                query=self.query,
+                context=context,
+                agent_role_prompt=agent_role_prompt,
+                report_type="research_report",  # Use standard report type for compatibility
+                tone=self.tone,
+                report_source=self.report_source,
+                websocket=None,  # No websocket for local usage
+                cfg=self.cfg,
+                main_topic="",
+                existing_headers=existing_headers,
+                relevant_written_contents=relevant_written_contents,
+                cost_callback=self.add_costs,
+                custom_prompt=custom_prompt,
+                headers=self.headers,
+                prompt_family=self.prompt_family,
+                **self.kwargs
+            )
+            
+            if self.verbose:
+                print(f"📝 Disruption analysis report completed ({len(report)} characters)")
+            
+            return report
+            
+        except Exception as e:
+            if self.verbose:
+                print(f"❌ Error generating report: {str(e)}")
+            
+            # Fallback: Create a basic report structure
+            fallback_report = f"""# Disruption Analysis Report
+
+## Query
+{self.query}
+
+## Analysis Summary
+Unable to generate detailed report due to technical issue: {str(e)}
+
+## Research Context
+{len(context)} sources analyzed from research phase.
+
+## Status
+Report generation encountered an error. Please check system configuration and try again.
+"""
+            return fallback_report
 
     # Essential utility methods (pruned)
     def get_research_sources(self) -> list[dict[str, Any]]:
@@ -194,12 +324,23 @@ class GPTResearcher:
         """Get URLs of collected sources."""
         return [source.get('url', '') for source in self.research_sources]
 
+    def get_research_images(self) -> list:
+        """Get collected research images."""
+        return []  # Return empty list since image processing is not implemented
+
+    def add_research_images(self, images: list) -> None:
+        """Add research images to collection (placeholder implementation)."""
+        # Placeholder - images are not stored since image processing is not implemented
+        pass
+
     def get_research_context(self) -> list:
         """Get current research context."""
         return self.react_state["context"]
 
     def get_costs(self) -> float:
-        """Get total research costs."""
+        """
+        Returns the total cost of the research task.
+        """
         return self.research_costs
 
     def set_verbose(self, verbose: bool):
@@ -209,8 +350,12 @@ class GPTResearcher:
     # Enhanced cost tracking and guards (already implemented above)
     def add_costs(self, cost: float) -> None:
         """Enhanced cost tracking with guards and monitoring for disruption analysis."""
-        # Implementation already provided above
-        pass
+        if isinstance(cost, (int, float)) and cost >= 0:
+            self.research_costs += cost
+            if self.verbose and cost > 0:
+                print(f"💸 Added ${cost:.4f} to research costs (Total: ${self.research_costs:.4f})")
+        elif self.verbose:
+            print(f"⚠️ Invalid cost value: {cost}")
 
     # Private helper methods (keep essential ones only)
     async def _log_event(self, event_type: str, **kwargs):

@@ -1,18 +1,20 @@
 {
-  "query": "Is AI in a hype cycle?",
-  "max_sections": 3,
+  "query": "Analyze Guidewire's potential to be impacted by AI, covering both positive opportunities and negative disruption risks. Focus on: 1) Positive AI opportunities for Guidewire (AI enhancement of insurance software products, new revenue streams, competitive advantages), 2) Negative disruption risks (threats from AI competitors, disintermediation risks, market share losses to AI startups), and 3) Strategic positioning (current AI initiatives, investments in AI technology, timeline for AI adoption).",
+  "max_sections": 5,
   "publish_formats": {
     "markdown": true,
     "pdf": true,
     "docx": true
   },
   "include_human_feedback": false,
-  "follow_guidelines": false,
+  "follow_guidelines": true,
   "model": "gpt-4o",
   "guidelines": [
-    "The report MUST be written in APA format",
-    "Each sub section MUST include supporting sources using hyperlinks. If none exist, erase the sub section or rewrite it to be a part of the previous section",
-    "The report MUST be written in spanish"
+    "The report MUST focus on concrete evidence and specific examples",
+    "Each section MUST include supporting sources using hyperlinks when available",
+    "The analysis MUST balance positive opportunities with negative risks objectively",
+    "Include recent developments and current market positioning of Guidewire",
+    "Provide actionable insights for strategic decision-making"
   ],
   "verbose": true
 }

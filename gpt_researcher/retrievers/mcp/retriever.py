@@ -59,6 +59,7 @@ class MCPRetriever:
         researcher=None,
         **kwargs
     ):
+        print(f"[MCPRetriever] __init__ called for query: {query}")
         """
         Initialize the MCP Retriever with disruption analysis configurations.
         
@@ -754,102 +755,9 @@ IMPORTANT: Average score must be ≥7.0 for a result to qualify for disruption a
 
     def search(self, max_results: int = 10) -> List[Dict[str, str]]:
         """
-        Perform a search using MCP tools with intelligent three-stage approach optimized for disruption analysis.
-        
-        This is the synchronous interface required by GPT Researcher.
-        It wraps the async search_async method.
-        
-        Args:
-            max_results: Maximum number of results to return.
-            
-        Returns:
-            List[Dict[str, str]]: The search results filtered for disruption analysis quality.
+        Main search method that orchestrates the MCP research process.
         """
-        # Check if we have any server configurations
-        if not self.mcp_configs:
-            error_msg = "No MCP server configurations available. Please provide mcp_configs parameter to GPTResearcher."
-            logger.error(error_msg)
-            self.streamer.stream_log_sync("❌ MCP retriever cannot proceed without server configurations.")
-            return []  # Return empty instead of raising to allow research to continue
-            
-        # Log to help debug the integration flow
-        logger.info(f"MCPRetriever.search called for disruption query: {self.query}")
-        
-        try:
-            # Handle the async/sync boundary properly
-            try:
-                # Try to get the current event loop
-                loop = asyncio.get_running_loop()
-                # If we're in an async context, we need to schedule the coroutine
-                # This is a bit tricky - we'll create a task and let it run
-                import concurrent.futures
-                import threading
-                
-                # Create a new event loop in a separate thread
-                def run_in_thread():
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        result = new_loop.run_until_complete(self.search_async(max_results))
-                        return result
-                    finally:
-                        # Enhanced cleanup procedure for MCP connections
-                        try:
-                            # Cancel all pending tasks with a timeout
-                            pending = asyncio.all_tasks(new_loop)
-                            for task in pending:
-                                task.cancel()
-                            
-                            # Wait for cancelled tasks to complete with timeout
-                            if pending:
-                                try:
-                                    new_loop.run_until_complete(
-                                        asyncio.wait_for(
-                                            asyncio.gather(*pending, return_exceptions=True),
-                                            timeout=5.0  # 5 second timeout for cleanup
-                                        )
-                                    )
-                                except asyncio.TimeoutError:
-                                    logger.debug("Timeout during task cleanup, continuing...")
-                                except Exception:
-                                    pass  # Ignore other cleanup errors
-                        except Exception:
-                            pass  # Ignore cleanup errors
-                        finally:
-                            try:
-                                # Give the loop a moment to finish any final cleanup
-                                import time
-                                time.sleep(0.1)
-                                
-                                # Force garbage collection to clean up any remaining references
-                                import gc
-                                gc.collect()
-                                
-                                # Additional time for HTTP clients to finish their cleanup
-                                time.sleep(0.2)
-                                
-                                # Close the loop
-                                if not new_loop.is_closed():
-                                    new_loop.close()
-                            except Exception:
-                                pass  # Ignore close errors
-                
-                # Run in a thread pool to avoid blocking the main event loop
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(run_in_thread)
-                    results = future.result(timeout=300)  # 5 minute timeout
-                    
-            except RuntimeError:
-                # No event loop is running, we can run directly
-                results = asyncio.run(self.search_async(max_results))
-            
-            return results
-            
-        except Exception as e:
-            logger.error(f"Error in MCP disruption analysis search: {e}")
-            self.streamer.stream_log_sync(f"❌ Error in MCP disruption analysis search: {str(e)}")
-            # Return empty results instead of raising to allow research to continue
-            return []
+        return asyncio.run(self.search_async(max_results=max_results))
 
     async def _get_all_tools(self) -> List:
         """

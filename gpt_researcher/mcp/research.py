@@ -9,6 +9,12 @@ import re
 import json
 import statistics
 from typing import List, Dict, Any
+import requests
+
+from ..actions.utils import stream_output
+from ..utils.llm import create_chat_completion
+from ..prompts import PromptFamily
+from ..config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -182,12 +188,13 @@ class MCPResearchSkill:
                         "indicator_mapping": indicator_mapping
                     })
                     
-                    # Log indicator summary
-                    y_scores = [ind['score'] for ind in indicator_mapping.get('y', [])]
-                    x_scores = [ind['score'] for ind in indicator_mapping.get('x', [])]
-                    avg_y = sum(y_scores) / len(y_scores) if y_scores else 0
-                    avg_x = sum(x_scores) / len(x_scores) if x_scores else 0
-                    logger.info(f"Y/X Indicators mapped: Y avg={avg_y:.1f}, X avg={avg_x:.1f}")
+                    # Log indicator coverage summary
+                    y_indicators = indicator_mapping.get('y', [])
+                    x_indicators = indicator_mapping.get('x', [])
+                    y_count = len(y_indicators)
+                    x_count = len(x_indicators)
+                    total_coverage = y_count + x_count
+                    logger.info(f"Y/X Indicators coverage: Y={y_count}, X={x_count}, Total={total_coverage}")
             
             logger.info(f"Research completed with {len(research_results)} total results")
             
@@ -1078,3 +1085,99 @@ Score 1=No disruption potential, 10=Maximum disruption potential. Use specific e
             })
             
         return fallback 
+
+
+class ResearchAssistant:
+    """
+    The ResearchAssistant is responsible for executing the research process.
+    """
+
+    def __init__(self, researcher):
+        self.researcher = researcher
+        self.mcp_retrievers = [
+            r for r in self.researcher.retrievers if "mcpretriever" in r.__name__.lower()
+        ]
+        self._mcp_results_cache = None
+
+    async def execute_mcp_research(self, query: str) -> list:
+        """
+        Executes a research query against the configured MCP server.
+        """
+        try:
+            mcp_config = self.researcher.mcp_configs[0]  # Assume one MCP server for now
+            url = mcp_config.get("command")
+            
+            payload = {
+                "query": query,
+                "max_results": 10,
+                "tool_name": "web_search"
+            }
+            
+            headers = {'Content-Type': 'application/json'}
+            
+            response = requests.post(url, data=json.dumps(payload), headers=headers)
+            response.raise_for_status()
+            
+            mcp_response = response.json()
+            return mcp_response.get("results", [])
+            
+        except Exception as e:
+            logger.error(f"Error executing MCP research: {e}")
+            return []
+
+    async def _fetch_mcp_results(
+        self, retriever, query: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Fetch MCP research results using the specified retriever.
+        """
+        retriever_instance = retriever(
+            query=query,
+            headers=self.researcher.headers,
+            query_domains=self.researcher.query_domains,
+            websocket=self.researcher.websocket,
+            researcher=self.researcher,
+        )
+        if self.researcher.verbose:
+            await stream_output(
+                "logs",
+                "mcp_retrieval_stage1",
+                f"🧠 Stage 1: Selecting optimal MCP tools for: {query}",
+                self.researcher.websocket,
+            )
+        results = retriever_instance.search(
+            max_results=self.researcher.cfg.max_search_results_per_query
+        )
+        if results:
+            logger.info(
+                f"MCP research completed: {len(results)} results from {retriever.__name__}"
+            )
+        return results
+
+    def get_mcp_strategy(self) -> str:
+        """
+        Get the MCP strategy from the configuration.
+        """
+        return getattr(self.researcher.cfg, "mcp_strategy", "fast")
+
+    async def process_query(self, query: str) -> List[Dict[str, Any]]:
+        """
+        Process a single query using the MCP strategy.
+        """
+        strategy = self.get_mcp_strategy()
+        if strategy == "disabled":
+            logger.info("MCP disabled, skipping research.")
+            return []
+
+        if strategy == "fast":
+            if self._mcp_results_cache is None:
+                self._mcp_results_cache = await self.execute_mcp_research(query)
+            return self._mcp_results_cache
+
+        if strategy == "deep":
+            return await self.execute_mcp_research(query)
+
+        logger.warning(f"Unknown MCP strategy '{strategy}', defaulting to fast.")
+        if self._mcp_results_cache is None:
+            self._mcp_results_cache = await self.execute_mcp_research(query)
+        return self._mcp_results_cache 

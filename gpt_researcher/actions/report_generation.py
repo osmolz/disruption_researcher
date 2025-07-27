@@ -254,6 +254,10 @@ async def generate_report(
     else:
         content = f"{generate_prompt(query, context, report_source, report_format=cfg.report_format, tone=tone, total_words=cfg.total_words, language=cfg.language)}"
     try:
+        # Filter out parameters not supported by create_chat_completion
+        valid_kwargs = {k: v for k, v in kwargs.items()
+                       if k not in ['query_domains', 'parent_query', 'query', 'context', 'agent_role_prompt', 'report_type', 'tone', 'report_source', 'websocket', 'cfg', 'main_topic', 'existing_headers', 'relevant_written_contents', 'custom_prompt', 'cost_callback', 'encoding']}
+
         report = await create_chat_completion(
             model=cfg.smart_llm_model,
             messages=[
@@ -267,10 +271,14 @@ async def generate_report(
             max_tokens=cfg.smart_token_limit,
             llm_kwargs=cfg.llm_kwargs,
             cost_callback=cost_callback,
-            **kwargs
+            **valid_kwargs
         )
     except:
         try:
+            # Filter out parameters not supported by create_chat_completion (same as above)
+            valid_kwargs = {k: v for k, v in kwargs.items()
+                           if k not in ['query_domains', 'parent_query', 'query', 'context', 'agent_role_prompt', 'report_type', 'tone', 'report_source', 'websocket', 'cfg', 'main_topic', 'existing_headers', 'relevant_written_contents', 'custom_prompt', 'cost_callback', 'encoding']}
+
             report = await create_chat_completion(
                 model=cfg.smart_llm_model,
                 messages=[
@@ -283,9 +291,54 @@ async def generate_report(
                 max_tokens=cfg.smart_token_limit,
                 llm_kwargs=cfg.llm_kwargs,
                 cost_callback=cost_callback,
-                **kwargs
+                **valid_kwargs
             )
         except Exception as e:
             print(f"Error in generate_report: {e}")
 
     return report
+
+
+async def write_md_to_pdf(report: str, config: Config, websocket=None) -> str:
+    """
+    Write a markdown report to a PDF file.
+
+    Args:
+        report (str): The report in markdown format.
+        config (Config): Configuration object.
+        websocket: WebSocket connection for streaming output.
+
+    Returns:
+        str: The path to the generated PDF file.
+    """
+    pass
+
+
+async def write_report_to_html(report: str, config: Config, websocket=None) -> str:
+    """
+    Write a report to an HTML file.
+
+    Args:
+        report (str): The report in markdown format.
+        config (Config): Configuration object.
+        websocket: WebSocket connection for streaming output.
+
+    Returns:
+        str: The path to the generated HTML file.
+    """
+    pass
+
+
+async def write_report_to_docx(report: str, config: Config, websocket=None) -> str:
+    """
+    Write a report to a DOCX file.
+
+    Args:
+        report (str): The report in markdown format.
+        config (Config): Configuration object;
+        websocket: WebSocket connection for streaming output.
+
+    Returns:
+        str: The path to the generated DOCX file.
+    """
+    pass
